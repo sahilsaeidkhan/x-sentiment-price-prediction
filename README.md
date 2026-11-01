@@ -12,7 +12,7 @@ Max Drawdown). Chosen asset: **Bitcoin (BTC-USD)**.
    - Price: BTC-USD daily OHLCV, last 180 days (Yahoo Finance / yfinance,
      with the Kraken public OHLC API as an automatic real-data fallback —
      the loader records which source served each run).
-   - X posts: **Apify** scraper actor (`apidojo/tweet-scraper`, configurable)
+   - X posts: **Apify** scraper actor (`kaitoeasyapi/twitter-x-data-tweet-scraper-pay-per-result-cheapest`, configurable)
      over `$BTC / Bitcoin / BTCUSD` — runs when `APIFY_API_TOKEN` is set.
    - Live sentiment (executed run): **StockTwits** public BTC.X stream —
      real messages with author-labelled Bullish/Bearish tags (no key needed).
@@ -76,7 +76,7 @@ python run_pipeline.py
 
 Secrets live only in `.env` (git-ignored) and are supplied by the
 candidate from his own free-tier accounts at submission time — never
-committed. Configured actor: **`apidojo/tweet-scraper`** (env
+committed. Configured actor: **`kaitoeasyapi/twitter-x-data-tweet-scraper-pay-per-result-cheapest`** (env
 `APIFY_ACTOR_ID`), search terms `$BTC`, `Bitcoin`, `BTCUSD`. Tavily
 (`TAVILY_API_KEY`) powers news; Exa (`EXA_API_KEY`) is reserved as the
 alternative search source named in the assignment.

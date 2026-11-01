@@ -25,9 +25,22 @@ EXA_API_KEY = os.getenv("EXA_API_KEY", "").strip()
 # --- Apify X (Twitter) scraper ----------------------------------------------
 # Actor used to scrape X posts about the asset. Runs only when
 # APIFY_API_TOKEN is set. Search terms target the BTC cashtag / keywords.
-APIFY_ACTOR_ID = os.getenv("APIFY_ACTOR_ID", "apidojo/tweet-scraper").strip()
+# Default actor: kaitoeasyapi pay-per-result tweet scraper. NOTE: the
+# better-known apidojo/tweet-scraper refuses free-plan Apify accounts
+# ("Monthly run limit exceeded per user" + empty results), verified
+# 2026-11-01; this actor runs on free-tier platform credit.
+APIFY_ACTOR_ID = os.getenv(
+    "APIFY_ACTOR_ID",
+    "kaitoeasyapi/twitter-x-data-tweet-scraper-pay-per-result-cheapest").strip()
 APIFY_SEARCH_TERMS = ["$BTC", "Bitcoin", "BTCUSD"]
 APIFY_MAX_ITEMS = 5000
+# Windowed backfill: one actor run per 30-day window (X search since:/until:)
+# so the 180-day sentiment history is sampled across the whole period
+# instead of only the most recent days. ~6 windows x 700 items stays
+# inside the free-tier credit.
+APIFY_WINDOW_DAYS = 30
+APIFY_MAX_ITEMS_PER_WINDOW = 700
+APIFY_WINDOW_TERMS = ["$BTC", "Bitcoin"]
 
 # --- StockTwits (public, no key) — live-run sentiment source ----------------
 STOCKTWITS_SYMBOL = "BTC.X"

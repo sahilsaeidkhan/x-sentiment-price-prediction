@@ -26,16 +26,47 @@ def fetch_apify() -> pd.DataFrame | None:
     from apify_client import ApifyClient
 
     client = ApifyClient(config.APIFY_API_TOKEN)
-    run_input = {
-        "searchTerms": config.APIFY_SEARCH_TERMS,
-        "maxItems": config.APIFY_MAX_ITEMS,
-        "sort": "Latest",
-        "tweetLanguage": "en",
-    }
-    print(f"[apify] starting actor {config.APIFY_ACTOR_ID} "
-          f"terms={config.APIFY_SEARCH_TERMS} maxItems={config.APIFY_MAX_ITEMS}")
-    run = client.actor(config.APIFY_ACTOR_ID).call(run_input=run_input)
-    items = list(client.dataset(run["defaultDatasetId"]).iterate_items())
+    items = []
+    # Windowed backfill over the last LOOKBACK_DAYS: one actor run per
+    # APIFY_WINDOW_DAYS window, using X advanced-search since:/until:
+    # operators, so tweets are sampled across the full 180 days rather
+    # than only the latest days a single "Latest" run would return.
+    end = pd.Timestamp.now("UTC").normalize() + pd.Timedelta(days=1)
+    start = end - pd.Timedelta(days=config.LOOKBACK_DAYS + 1)
+    windows = []
+    w = start
+    while w < end:
+        windows.append((w, min(w + pd.Timedelta(days=config.APIFY_WINDOW_DAYS), end)))
+        w += pd.Timedelta(days=config.APIFY_WINDOW_DAYS)
+    for w_start, w_end in windows:
+        terms = [f"{t} since:{w_start.date()} until:{w_end.date()}"
+                 for t in config.APIFY_WINDOW_TERMS]
+        run_input = {
+            "searchTerms": terms,
+            "maxItems": config.APIFY_MAX_ITEMS_PER_WINDOW,
+            "sort": "Latest",
+            "tweetLanguage": "en",
+        }
+        print(f"[apify] window {w_start.date()} -> {w_end.date()} "
+              f"terms={terms} maxItems={config.APIFY_MAX_ITEMS_PER_WINDOW}")
+        try:
+            run = client.actor(config.APIFY_ACTOR_ID).call(run_input=run_input)
+            ds_id = (getattr(run, "default_dataset_id", None)
+                     or run["defaultDatasetId"])
+            got = list(client.dataset(ds_id).iterate_items())
+            got = [g for g in got if not g.get("noResults")]
+        except Exception as exc:
+            print(f"[apify] window {w_start.date()} FAILED: {exc}")
+            continue
+        print(f"[apify] window {w_start.date()}: {len(got)} items")
+        items.extend(got)
+        # Checkpoint after every window so an interrupted run keeps the
+        # tweets already paid for; the final block below re-saves the
+        # same normalised frame.
+        if items:
+            pd.DataFrame(items).to_csv(
+                config.DATA_DIR / "x_posts_apify_raw_checkpoint.csv",
+                index=False)
     if not items:
         print("[apify] actor returned no items.")
         return None
@@ -58,8 +89,10 @@ def fetch_apify() -> pd.DataFrame | None:
             "followers": author.get("followers", 0) or 0,
         })
     df = pd.DataFrame(rows).drop_duplicates(subset=["id"])
+    # Actor timestamps arrive as e.g. "Sun Nov 01 19:36:47 +0000 2026"
+    # (X's native format), not ISO8601 — parse flexibly.
     df["created_at"] = pd.to_datetime(df["created_at"], utc=True,
-                                      format="ISO8601")
+                                      format="mixed")
     df = df.sort_values("created_at").reset_index(drop=True)
     out = config.DATA_DIR / "x_posts_apify.csv"
     df.to_csv(out, index=False)
